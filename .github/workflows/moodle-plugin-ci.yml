@@ -1,6 +1,10 @@
 name: Moodle Plugin CI
 
-on: [push, pull_request]
+on:
+  push:
+    branches: [ 'master' ]
+  pull_request:
+    branches: [ 'master' ]
 
 jobs:
   setup:
@@ -18,17 +22,19 @@ jobs:
     env:
        DB: 'pgsql'
        DBHOST: 'postgres'
+       # TODO: Omitted MOODLE_BRANCH results in regex failure, investigate.
        MOODLE_BRANCH: 'master'
     steps:
     - name: Check out repository code
       uses: actions/checkout@v2
       with:
-        # Clone in plugin subdir, so we can keep setup in default directory.
+        # Clone in plugin subdir, so we can setup CI in default directory.
         path: plugin
 
     - name: Install node
       uses: actions/setup-node@v1
       with:
+        # TODO: Check if we can support .nvmrc
         node-version: '14.15.0'
 
     - name: Setup PHP environment
@@ -38,16 +44,33 @@ jobs:
         extensions: mbstring, pgsql
         tools: phpunit
 
-    - name: Deploy moodlehq/moodle-plugin-ci
+    - name: Deploy moodle-plugin-ci
       run: |
         composer create-project -n --no-dev --prefer-dist moodlehq/moodle-plugin-ci ci ^3
+        # Add dirs to $PATH
         echo $(cd ci/bin; pwd) >> $GITHUB_PATH
         echo $(cd ci/vendor/bin; pwd) >> $GITHUB_PATH
-        # GITHUB_WORKSPACE is available after checkout action and reflect
-        # where code is located.
+        # GITHUB_WORKSPACE is available after checkout action and reflects
+        # default build directory. Set TRAVIS_BUILD_DIR to plugin clone, this
+        # is where it will be copied from to moodle install.
         echo "TRAVIS_BUILD_DIR=${GITHUB_WORKSPACE}/plugin" >> $GITHUB_ENV
 
     - name: Install moodle-plugin-ci
+      run: moodle-plugin-ci install -vvv
+
+    - name: Run Integration tests
       run: |
-        moodle-plugin-ci install -vvv
+        # Currently it stopes if any command return non 0 exist status, need
+        # wrapper to collect exist status and list result and the end.
+        moodle-plugin-ci phplint || true
+        moodle-plugin-ci phpcpd || true
+        moodle-plugin-ci phpmd || true
+        moodle-plugin-ci codechecker || true
+        moodle-plugin-ci validate || true
+        moodle-plugin-ci savepoints || true
+        moodle-plugin-ci mustache || true
+        moodle-plugin-ci grunt || true
+        moodle-plugin-ci phpdoc || true
+        moodle-plugin-ci phpunit || true
+        moodle-plugin-ci behat || true
 
