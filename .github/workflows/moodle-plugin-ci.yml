@@ -1,10 +1,6 @@
 name: Moodle Plugin CI
 
-on:
-  push:
-    branches: [ 'master' ]
-  pull_request:
-    branches: [ 'master' ]
+on: [push, pull_request]
 
 jobs:
   setup:
@@ -23,10 +19,17 @@ jobs:
        DB: 'pgsql'
        DBHOST: 'postgres'
        MOODLE_BRANCH: 'master'
-       TRAVIS_BUILD_DIR: $GITHUB_WORKSPACE
     steps:
     - name: Check out repository code
       uses: actions/checkout@v2
+      with:
+        # Clone in plugin subdir, so we can keep setup in default directory.
+        path: plugin
+
+    - name: Install node
+      uses: actions/setup-node@v1
+      with:
+        node-version: '14.15.0'
 
     - name: Setup PHP environment
       uses: shivammathur/setup-php@v2 #https://github.com/shivammathur/setup-php
@@ -38,8 +41,13 @@ jobs:
     - name: Deploy moodlehq/moodle-plugin-ci
       run: |
         composer create-project -n --no-dev --prefer-dist moodlehq/moodle-plugin-ci ci ^3
-        echo $(cd ci/bin; pwd) >> $GITHUB_PATH; echo $(cd ci/vendor/bin; pwd) >> $GITHUB_PATH
+        echo $(cd ci/bin; pwd) >> $GITHUB_PATH
+        echo $(cd ci/vendor/bin; pwd) >> $GITHUB_PATH
+        # GITHUB_WORKSPACE is available after checkout action and reflect
+        # where code is located.
+        echo "TRAVIS_BUILD_DIR=${GITHUB_WORKSPACE}/plugin" >> $GITHUB_ENV
 
     - name: Install moodle-plugin-ci
-      run: moodle-plugin-ci install -vvv
+      run: |
+        moodle-plugin-ci install -vvv
 
